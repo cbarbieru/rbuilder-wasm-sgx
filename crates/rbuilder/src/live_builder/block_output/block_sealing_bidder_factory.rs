@@ -104,10 +104,22 @@ where
             self.competition_bid_value_source.clone(),
             cancel.clone(),
         );
+        tracing::info!("Creating SequentialSealerBidMaker for slot data: block={}, slot={}, PLAYGROUND={:?}", 
+            slot_data.block(), slot_data.slot(), std::env::var("PLAYGROUND").ok());
+        let bid_processing_cancel = tokio_util::sync::CancellationToken::new();
+        let bid_processing_cancel_clone = bid_processing_cancel.clone();
+        let building_cancel = cancel.clone();
+        tokio::spawn(async move {
+            building_cancel.cancelled().await;
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            bid_processing_cancel.cancel();
+        });
+        
         let sealer = Box::new(SequentialSealerBidMaker::new(
             Arc::from(finished_block_sink),
-            cancel.clone(),
+            bid_processing_cancel_clone,
         ));
+        tracing::info!("Created SequentialSealerBidMaker");
 
         let slot_bidder: Arc<dyn SlotBidder> = self.bidding_service.create_slot_bidder(
             slot_data.block(),
